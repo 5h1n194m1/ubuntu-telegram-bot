@@ -1,0 +1,30 @@
+🚀 <b>ZULBOT ULTIMATE COMMAND CENTER</b>
+──────────────────────
+💻 <b>REAL HARDWARE SPEC</b>
+• <b>Device:</b> TOSHIBA Satellite C640 (Bondol)
+• <b>CPU:</b> Intel® Core™ i5-2450M @ 2.50GHz
+• <b>Core/Threads:</b> 2 Core / 4 Threads
+• <b>RAM:</b> 8GB DDR3 1333 MT/s (Single Slot Active)
+• <b>Storage:</b> HGST HTS725032A7 (320GB - 7200 RPM)
+• <b>OS:</b> Ubuntu 25.10 (Plucky Puffin)
+• <b>Kernel:</b> Linux 6.17.0-14-generic
+• <b>Firmware Age:</b> 14 Years (Classic Power)
+🛠️ <b>COMMAND LIST</b>
+/status - Cek RAM & Hostname
+/temp - Cek suhu CPU (Real-time)
+/storage - Cek sisa HDD
+/list - List file download
+/cleanup - Hapus file (Safe)
+/dls [url] - Download ke Server
+/yts [url] - YT ke Server
+📝 <b>LOG UPDATE:</b>
+✅ <b>[2026-02-22]</b> - RAM Upgraded to 8GB DDR3.
+✅ <b>[2026-02-22]</b> - CPU i5-2450M Verified (4 Threads).
+✅ <b>[2026-02-22]</b> - Kernel Update to 6.17.0.
+✅ <b>[2026-02-22]</b> - Monitoring /setinfo Activated.
+──────────────────────
+👤 <b>ADMIN ACCESS</b>
+• Main Admin: <code>1135391914</code>
+• Admin 2: <code>871102197</code>
+──────────────────────
+<i>"Built on 2011, Still Ruling in 2026"</i>

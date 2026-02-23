@@ -1,0 +1,7 @@
+*.rar
+*.zip
+*.7z
+downloads/
+__pycache__/
+venv/
+.env
