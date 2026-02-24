@@ -1,0 +1,48 @@
+### 🚨 Panduan Darurat Perbaikan Zul Bot
+Jika bot error, tidak merespon, atau muncul pesan **Conflict**:
+
+#### 1. Bersihkan Proses (Langkah Pertama)
+Hentikan semua proses Python yang nyangkut di background agar tidak bentrok:
+
+pkill -9 python3
+
+
+
+#### 2. Matikan Otomatisasi (Jika perlu Debugging manual)
+
+Jika Anda ingin menjalankan bot secara manual di terminal untuk melihat errornya:
+
+sudo systemctl stop zul.service
+sudo systemctl disable zul.service
+
+#### 3. Jalankan Manual (Untuk Cek Log Error)
+
+python3 /home/zul/zulbot/app.py
+
+#### 4. Aktifkan Kembali Otomatisasi (Background Mode)
+
+Setelah kode diperbaiki dan bot manual sudah dimatikan (`Ctrl+C`), jalankan ini:
+
+sudo systemctl daemon-reload
+sudo systemctl enable zul.service
+sudo systemctl start zul.service
+
+#### 5. Pantau Apa yang Terjadi di Dalam Bot
+
+Gunakan perintah ini untuk melihat "Banner Hijau" dan aktivitas bot saat ini:
+
+journalctl -u zul.service -f
+
+---
+
+### Tips Cepat (Perintah Sekali Jalan):
+
+* **Mau Update Kode?** Cukup: `sudo systemctl restart zul.service`
+* **Mau Cek Bot Hidup/Mati?** Cukup: `sudo systemctl status zul.service`
+* **Mau Cek Suhu Tanpa Bot?** Cukup: `cat /sys/class/thermal/thermal_zone*/temp`
+
+Catatan ini sudah saya simpan, jadi kalau nanti Anda lupa, tanya saja: *"Langkah benerin Conflict kemarin gimana?"*, saya akan langsung kasih instruksinya lagi.
+
+Saya telah mencatat langkah-langkah penanganan error tersebut. Anda selalu bisa minta saya untuk melupakan atau mengelola informasi yang saya simpan [di setelan](https://gemini.google.com/saved-info).
+
+Ada lagi yang bisa saya bantu untuk menyempurnakan server Toshiba Anda hari ini?
