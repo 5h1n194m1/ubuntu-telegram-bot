@@ -46,7 +46,7 @@ IP     : {data.get('ip', '0.0.0.0')}
 <i>Gunakan mode Server untuk file berukuran besar.</i>
 """
 
-def render_status(cpu, ram, disk) -> str:
+def render_status(cpu, ram, disk, temp) -> str:
     """
     Menampilkan status resource sistem.
     ram & disk diharapkan berupa list/tuple: [persen, used, total]
@@ -54,7 +54,8 @@ def render_status(cpu, ram, disk) -> str:
     return f"""
 <b>📊 SYSTEM STATUS</b>
 <pre>
-CPU  : {cpu}%
+
+CPU  : {cpu}% ({temp})
 RAM  : {ram[0]}% ({ram[1]:.2f}GB/{ram[2]:.2f}GB)
 DISK : {disk[0]}% ({disk[1]:.2f}GB/{disk[2]:.2f}GB)
 </pre>

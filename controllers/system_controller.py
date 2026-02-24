@@ -46,6 +46,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         cpu = SystemModel.get_cpu()
+        temp = SystemModel.get_cpu_temp()
         r = SystemModel.get_ram()   # [persen, used, total]
         d = SystemModel.get_disk()  # [persen, used, total]
         
@@ -53,7 +54,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ram_data = [r[0], r[1] / (1024**3), r[2] / (1024**3)]
         disk_data = [d[0], d[1] / (1024**3), d[2] / (1024**3)]
         
-        msg = render_status(cpu, ram_data, disk_data)
+        msg = render_status(cpu, ram_data, disk_data, temp)
         await update.message.reply_text(msg, parse_mode="HTML")
     except Exception as e:
         await update.message.reply_text(f"❌ Error Status: {e}")
@@ -85,7 +86,7 @@ async def list_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         # Mengambil daftar file di folder downloads
-        files = sorted(DOWNLOAD_DIR.glob("*"), key=os.path.getmtime, reverse=True)
+        files = sorted(DOWNLOAD_DIR.glob("*"), key=lambda f: f.stat().st_mtime, reverse=True)
         
         if not files:
             await update.message.reply_text("📂 <b>Folder kosong, Bos.</b>", parse_mode="HTML")

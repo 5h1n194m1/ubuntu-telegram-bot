@@ -50,8 +50,21 @@ class SystemModel:
 
     @staticmethod
     def get_cpu_temp():
-        try:
-            with open("/sys/class/thermal/thermal_zone0/temp") as f:
-                return f"{int(f.read())/1000:.1f}°C"
-        except:
-            return "N/A"
+        # Daftar lokasi sensor suhu umum di Linux
+        thermal_paths = [
+            "/sys/class/thermal/thermal_zone0/temp",
+            "/sys/class/thermal/thermal_zone1/temp",
+            "/sys/class/hwmon/hwmon0/temp1_input"
+        ]
+        
+        for path in thermal_paths:
+            try:
+                if os.path.exists(path):
+                    with open(path, "r") as f:
+                        temp = f.read().strip()
+                    # Pastikan nilainya angka
+                    return f"{int(temp) / 1000:.1f}°C"
+            except:
+                continue
+        
+        return "Not Found"
