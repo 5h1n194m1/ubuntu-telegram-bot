@@ -5,7 +5,7 @@ from telegram.ext import ContextTypes
 from config.settings import ALLOWED_IDS, DOWNLOAD_DIR
 from models.system_model import SystemModel
 from views.messages import render_start, render_status
-from utils.helpers import is_allowed
+from utils.helpers import is_allowed, format_size
 
 # ============================= START HANDLER =============================== #
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -20,7 +20,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             'kernel': SystemModel.get_kernel(),
             'uptime': SystemModel.get_uptime(),
             'ip': SystemModel.get_public_ip(),
-            'cpu': SystemModel.get_cpu()
+            'cpu': SystemModel.get_cpu(),
+            'temp': SystemModel.get_cpu_temp()
         }
 
         # Menu tombol cepat di bawah (Keyboard Menu)
@@ -85,20 +86,45 @@ async def list_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # Mengambil daftar file di folder downloads
+        # 1. Mengambil daftar file di folder downloads
         files = sorted(DOWNLOAD_DIR.glob("*"), key=lambda f: f.stat().st_mtime, reverse=True)
         
+        # 2. Ambil data langsung dari OS untuk akurasi
+        import shutil
+        total, used, free = shutil.disk_usage("/") # Ambil data root
+
+        # Hitung persentase penggunaan
+        percent_used = (used / total) * 100
+
         if not files:
-            await update.message.reply_text("📂 <b>Folder kosong, Bos.</b>", parse_mode="HTML")
+            await update.message.reply_text(
+                f"📂 <b>Folder kosong, Bos.</b>",
+                f"💾 <b>Sisa Disk:</b> {format_size(free)}",
+                parse_mode="HTML"
+                )
             return
 
-        # Ambil 20 file terbaru
-        file_list = "\n".join([f"• <code>{f.name}</code>" for f in files[:20]])
-        output = f"<b>📂 Daftar File (20 Terbaru):</b>\n\n{file_list}"
+        # 3. Rakit daftar file (limit 15 file terbaru)
+        file_list = []
+        for f in files[:15]:
+            # Mengambil ukuran tiap file secara real-time
+            f_size = format_size(f.stat().st_size)
+            file_list.append(f"• <code>{f.name}</code>\n  └─ 📦 <b>{f_size}</b>")
+        
+        # 5. Gabungkan menjadi satu pesan utuh
+        output = (
+            f"<b>📂 DAFTAR FILE SERVER</b>\n"
+            f"─────────────────────────\n"
+            f"{chr(10).join(file_list)}\n"
+            f"─────────────────────────\n"
+            f"💾 <b>Sisa Disk:</b> {format_size(free)} ({percent_used:.1f})% Used)\n"
+            f"<i>Gunakan /cleanup jika sisa disk menipis.</i>"
+        )
         
         await update.message.reply_text(output, parse_mode="HTML")
     except Exception as e:
         await update.message.reply_text(f"❌ Error List: {e}")
+        
 
 # ============================= CLEANUP HANDLER =============================== #
 async def cleanup(update: Update, context: ContextTypes.DEFAULT_TYPE):

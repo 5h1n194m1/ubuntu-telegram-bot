@@ -7,6 +7,7 @@ def render_start(data: dict) -> str:
     """
     # Ambil suhu dari data, default ke N/A jika tidak ada
     temp_val = data.get('temp', 'N/A')
+    cpu_val = data.get('cpu', 0)
     
     return f"""
 <pre>
@@ -20,10 +21,10 @@ def render_start(data: dict) -> str:
 ZUL SERVER
 ─────────────────────────
 OS     : {data.get('os', 'Ubuntu')}
-Host   : {data.get('host', 'Unknown')}
+Host   : {data.get('host', 'Zul')}
 Kernel : {data.get('kernel', 'N/A')}
 Uptime : {data.get('uptime', 'N/A')}
-CPU    : {data.get('cpu', 0):.1f}% ({temp_val})
+CPU    : {cpu_val:.1f}% ({temp_val})
 IP     : {data.get('ip', '0.0.0.0')}
 </pre>
 
@@ -55,12 +56,12 @@ def render_status(cpu, ram, disk, temp) -> str:
     ram & disk diharapkan berupa list/tuple: [persen, used, total]
     """
     # Menambahkan pengecekan tipe data temp agar tampilan tetap rapi
-    cpu_temp = temp if temp else "N/A"
+    cpu_temp = str(temp).strip() if temp else "N/A"
     
     return f"""
 <b>📊 SYSTEM STATUS</b>
 <pre>
-CPU  : {cpu}% ({cpu_temp})
+CPU  : {cpu:.1f}% ({cpu_temp})
 RAM  : {ram[0]}% ({ram[1]:.2f}GB/{ram[2]:.2f}GB)
 DISK : {disk[0]}% ({disk[1]:.2f}GB/{disk[2]:.2f}GB)
 </pre>
