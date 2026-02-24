@@ -40,9 +40,3 @@ journalctl -u zul.service -f
 * **Mau Update Kode?** Cukup: `sudo systemctl restart zul.service`
 * **Mau Cek Bot Hidup/Mati?** Cukup: `sudo systemctl status zul.service`
 * **Mau Cek Suhu Tanpa Bot?** Cukup: `cat /sys/class/thermal/thermal_zone*/temp`
-
-Catatan ini sudah saya simpan, jadi kalau nanti Anda lupa, tanya saja: *"Langkah benerin Conflict kemarin gimana?"*, saya akan langsung kasih instruksinya lagi.
-
-Saya telah mencatat langkah-langkah penanganan error tersebut. Anda selalu bisa minta saya untuk melupakan atau mengelola informasi yang saya simpan [di setelan](https://gemini.google.com/saved-info).
-
-Ada lagi yang bisa saya bantu untuk menyempurnakan server Toshiba Anda hari ini?

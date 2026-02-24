@@ -3,8 +3,11 @@
 def render_start(data: dict) -> str:
     """
     Menampilkan banner ASCII ZUL dan daftar perintah lengkap.
-    Pastikan data berisi: os, host, kernel, uptime, cpu, ip.
+    Pastikan data berisi: os, host, kernel, uptime, cpu, ip, temp.
     """
+    # Ambil suhu dari data, default ke N/A jika tidak ada
+    temp_val = data.get('temp', 'N/A')
+    
     return f"""
 <pre>
 ███████╗██╗   ██╗██╗     
@@ -20,7 +23,7 @@ OS     : {data.get('os', 'Ubuntu')}
 Host   : {data.get('host', 'Unknown')}
 Kernel : {data.get('kernel', 'N/A')}
 Uptime : {data.get('uptime', 'N/A')}
-CPU    : {data.get('cpu', 0):.1f}%
+CPU    : {data.get('cpu', 0):.1f}% ({temp_val})
 IP     : {data.get('ip', '0.0.0.0')}
 </pre>
 
@@ -51,11 +54,13 @@ def render_status(cpu, ram, disk, temp) -> str:
     Menampilkan status resource sistem.
     ram & disk diharapkan berupa list/tuple: [persen, used, total]
     """
+    # Menambahkan pengecekan tipe data temp agar tampilan tetap rapi
+    cpu_temp = temp if temp else "N/A"
+    
     return f"""
 <b>📊 SYSTEM STATUS</b>
 <pre>
-
-CPU  : {cpu}% ({temp})
+CPU  : {cpu}% ({cpu_temp})
 RAM  : {ram[0]}% ({ram[1]:.2f}GB/{ram[2]:.2f}GB)
 DISK : {disk[0]}% ({disk[1]:.2f}GB/{disk[2]:.2f}GB)
 </pre>
