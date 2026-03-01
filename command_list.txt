@@ -1,34 +1,33 @@
 =====================================================
-COMMANDS UNTUK MANAGEMENT BOT (ZUL.SERVICE)
-Update: 2026-03-01
+POOL COMMAND - BOT MANAGEMENT (ZUL.SERVICE)
 =====================================================
 
-1. CEK STATUS (Melihat apakah bot sedang jalan/error)
-   sudo systemctl status zul.service
+--- SERVICE COMMANDS ---
+Cek Status:     sudo systemctl status zul.service
+Restart:        sudo systemctl restart zul.service
+Stop:           sudo systemctl stop zul.service
+Start:          sudo systemctl start zul.service
+Enable Auto:    sudo systemctl enable zul.service
+Disable Auto:   sudo systemctl disable zul.service
+Lihat Log:      journalctl -u zul.service -f
 
-2. RESTART (Wajib dilakukan setelah update kode/git pull)
-   sudo systemctl restart zul.service
+--- GIT COMMANDS ---
+Update Kode:    git pull origin main
+Push Kode:      git add . && git commit -m "update" && git push origin main
+Cek Perubahan:  git status
 
-3. STOP (Mematikan bot sementara)
-   sudo systemctl stop zul.service
+--- SERVER COMMANDS ---
+Cek Disk:       df -h
+Cek RAM:        free -m
+Cek Port:       sudo netstat -tulpn | grep python
+Hapus File:     rm -rf ./downloads/*
 
-4. START (Menyalakan bot kembali)
-   sudo systemctl start zul.service
+--- CARA PAKAI SCRIPT .SH ---
+1. Beri izin eksekusi dulu (sekali saja):
+   chmod +x manage.sh sync.sh check.sh
 
-5. DISABLE (Mencegah bot nyala otomatis saat server restart)
-   sudo systemctl disable zul.service
-
-6. ENABLE (Membuat bot nyala otomatis saat server restart)
-   sudo systemctl enable zul.service
-
-7. CEK LOG REAL-TIME (Melihat error atau aktivitas user)
-   journalctl -u zul.service -f
-
-8. RELOAD SYSTEMD (Gunakan jika kamu mengedit file zul.service)
-   sudo systemctl daemon-reload
-
-=====================================================
-Catatan: Pastikan kamu login sebagai user dengan akses sudo.
-Jika mengganti nama file service, ganti 'zul.service' 
-dengan nama file yang baru.
+2. Jalankan script:
+   ./manage.sh restart
+   ./sync.sh
+   ./check.sh
 =====================================================
