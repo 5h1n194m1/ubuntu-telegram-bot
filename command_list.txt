@@ -1,0 +1,34 @@
+=====================================================
+COMMANDS UNTUK MANAGEMENT BOT (ZUL.SERVICE)
+Update: 2026-03-01
+=====================================================
+
+1. CEK STATUS (Melihat apakah bot sedang jalan/error)
+   sudo systemctl status zul.service
+
+2. RESTART (Wajib dilakukan setelah update kode/git pull)
+   sudo systemctl restart zul.service
+
+3. STOP (Mematikan bot sementara)
+   sudo systemctl stop zul.service
+
+4. START (Menyalakan bot kembali)
+   sudo systemctl start zul.service
+
+5. DISABLE (Mencegah bot nyala otomatis saat server restart)
+   sudo systemctl disable zul.service
+
+6. ENABLE (Membuat bot nyala otomatis saat server restart)
+   sudo systemctl enable zul.service
+
+7. CEK LOG REAL-TIME (Melihat error atau aktivitas user)
+   journalctl -u zul.service -f
+
+8. RELOAD SYSTEMD (Gunakan jika kamu mengedit file zul.service)
+   sudo systemctl daemon-reload
+
+=====================================================
+Catatan: Pastikan kamu login sebagai user dengan akses sudo.
+Jika mengganti nama file service, ganti 'zul.service' 
+dengan nama file yang baru.
+=====================================================

@@ -1,79 +1,71 @@
-# controllers/download_controller.py
 import os
-import requests
-import subprocess
-from telegram import Update
+import asyncio
+import shlex  # Untuk menangani karakter aneh di URL
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from config.settings import ALLOWED_IDS, DOWNLOAD_DIR
-from utils.helpers import is_allowed
+from utils.helpers import is_allowed, format_size
 
-# --- DOWNLOAD KE SERVER (dls & yts) ---
-
-async def dls(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed(update.effective_user.id, ALLOWED_IDS):
-        return
-    if not context.args:
-        await update.message.reply_text("❌ Gunakan: <code>/dls [link]</code>", parse_mode="HTML")
-        return
-
-    url = context.args[0]
-    filename = url.split("/")[-1].split("?")[0] or "file_server"
-    save_path = os.path.join(DOWNLOAD_DIR, filename)
-    
-    msg = await update.message.reply_text(f"⏳ <b>SERVER:</b> Mendownload...\n📄 <code>{filename}</code>", parse_mode="HTML")
-
-    try:
-        with requests.get(url, stream=True, timeout=20) as r:
-            r.raise_for_status()
-            with open(save_path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=1024*1024): # 1MB Chunk
-                    f.write(chunk)
-        await msg.edit_text(f"✅ <b>Selesai ke Server!</b>\n📂 Lokasi: <code>{save_path}</code>", parse_mode="HTML")
-    except Exception as e:
-        await msg.edit_text(f"❌ <b>Gagal:</b> {str(e)}")
+def get_url_from_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Fungsi sakti untuk ambil link dari argumen ATAU reply"""
+    # 1. Cek dari Reply
+    if update.message.reply_to_message and update.message.reply_to_message.text:
+        return update.message.reply_to_message.text.split()[0]
+    # 2. Cek dari Argumen (/dls [link])
+    if context.args:
+        return context.args[0]
+    return None
 
 async def yts(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed(update.effective_user.id, ALLOWED_IDS):
-        return
-    if not context.args:
-        await update.message.reply_text("❌ Gunakan: <code>/yts [link_yt]</code>", parse_mode="HTML")
-        return
-
-    link = context.args[0]
-    await update.message.reply_text("🎬 <b>YT-DLP:</b> Memproses ke storage server...")
+    if not is_allowed(update.effective_user.id, ALLOWED_IDS): return
     
-    # Jalankan yt-dlp secara background menggunakan subprocess
-    try:
-        subprocess.Popen(["yt-dlp", "-P", str(DOWNLOAD_DIR), "-f", "mp4", link])
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error menjalankan yt-dlp: {e}")
-
-# --- DOWNLOAD KE DEVICE (dl & yt) ---
-
-async def dl(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed(update.effective_user.id, ALLOWED_IDS):
-        return
-    if not context.args:
-        await update.message.reply_text("❌ Gunakan: <code>/dl [link]</code>")
+    url = get_url_from_update(update, context)
+    if not url:
+        await update.message.reply_text("❌ Mana link-nya, Bos? Kirim linknya atau reply linknya pake perintah ini.")
         return
 
-    url = context.args[0]
-    msg = await update.message.reply_text("📥 Mengambil file untuk HP...")
+    msg = await update.message.reply_text("🎬 <b>YT-DLP:</b> Memproses link ke server...", parse_mode="HTML")
+    
+    # Gunakan shlex.quote agar karakter ? & / tidak bikin error
+    safe_url = shlex.quote(url)
     
     try:
-        response = requests.get(url, timeout=15)
-        # Limit 50MB karena batasan bot Telegram
-        if len(response.content) > 50 * 1024 * 1024:
-            await msg.edit_text("⚠️ File > 50MB. Gunakan <code>/dls</code> untuk simpan di server.")
-            return
+        # Kita pakai yt-dlp karena dia pintar cari link download asli di balik web
+        cmd = f"yt-dlp -P {shlex.quote(str(DOWNLOAD_DIR))} -f 'bestvideo[height<=1080]+bestaudio/best' --merge-output-format mp4 {safe_url}"
         
-        filename = url.split("/")[-1].split("?")[0] or "file_hp"
-        await update.message.reply_document(document=response.content, filename=filename)
-        await msg.delete()
-    except Exception as e:
-        await msg.edit_text(f"❌ Gagal: {e}")
+        process = await asyncio.create_subprocess_shell(
+            cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        
+        stdout, stderr = await process.communicate()
 
-async def yt(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed(update.effective_user.id, ALLOWED_IDS):
+        if process.returncode == 0:
+            await msg.edit_text("✅ <b>Youtube Selesai!</b> Kualitas Full HD disimpan di server.", parse_mode="HTML")
+        else:
+            await msg.edit_text(f"❌ <b>Gagal:</b> Link tidak valid atau tidak didukung.")
+    except Exception as e:
+        await msg.edit_text(f"❌ Error: {str(e)}")
+
+async def dls(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_allowed(update.effective_user.id, ALLOWED_IDS): return
+    
+    url = get_url_from_update(update, context)
+    if not url:
+        await update.message.reply_text("❌ Kirim link atau reply link dengan /dls")
         return
-    await update.message.reply_text("🛠 Fitur YT ke Device sedang dikembangkan. Gunakan <code>/yts</code> sementara.")
+
+    msg = await update.message.reply_text("⏳ <b>Aria2:</b> Menarik file ke server...", parse_mode="HTML")
+    
+    try:
+        # Pakai Aria2 dengan tanda kutip agar aman dari karakter aneh
+        safe_url = shlex.quote(url)
+        cmd = f"aria2c -d {shlex.quote(str(DOWNLOAD_DIR))} --seed-time=0 {safe_url}"
+        
+        process = await asyncio.create_subprocess_shell(cmd)
+        await process.wait()
+        
+        await msg.edit_text("✅ <b>Selesai!</b> File sudah mendarat di storage server.", parse_mode="HTML")
+    except Exception as e:
+        await msg.edit_text(f"❌ Gagal: {str(e)}")

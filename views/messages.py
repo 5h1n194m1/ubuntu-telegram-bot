@@ -43,9 +43,11 @@ IP     : {data.get('ip', '0.0.0.0')}
 <code>/yts [link]</code> - Download YouTube ke Server
 <code>/dls [link]</code> - Download File ke Server
 
-<b>📂 MANAGEMENT</b>
-<code>/list</code> - Lihat isi folder download
-<code>/cleanup</code> - Hapus semua isi folder
+<b>📂 MANAGEMENT (PENTING)</b>
+<code>/list</code> - Lihat isi folder & ukuran
+<code>/manage</code> - 🛠️ <b>Pilih file untuk dihapus</b>
+<code>/cleanup</code> - Hapus semua (Bumi Hangus)
+
 ─────────────────────────
 <i>Gunakan mode Server untuk file berukuran besar.</i>
 """

@@ -7,7 +7,8 @@ from config.settings import TOKEN
 
 # Models & Controllers
 from models.system_model import SystemModel
-from controllers.system_controller import start, status, storage, list_files, cleanup, cleanup_callback
+from controllers.system_controller import (
+    start, status, storage, list_files, cleanup, cleanup_callback, manage_files)
 from controllers.info_controller import info, setinfo
 from controllers.download_controller import dl, yt, dls, yts
 
@@ -63,6 +64,7 @@ def main():
     app.add_handler(CommandHandler("storage", storage))
     app.add_handler(CommandHandler("list", list_files))
     app.add_handler(CommandHandler("cleanup", cleanup))
+    app.add_handler(CommandHandler("manage", manage_files))  
     app.add_handler(CallbackQueryHandler(cleanup_callback))
     
     # [2] Register Info Handlers
