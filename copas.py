@@ -1,191 +1,101 @@
-# controllers/system_controller.py
 import os
-import shutil
 import asyncio
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup
+import shlex
+import glob
+from telegram import Update
 from telegram.ext import ContextTypes
 from config.settings import ALLOWED_IDS, DOWNLOAD_DIR
-from models.system_model import SystemModel
-from views.messages import render_start, render_status
 from utils.helpers import is_allowed, format_size
 
-# ============================= START HANDLER =============================== #
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed(update.effective_user.id, ALLOWED_IDS):
-        return
-    try:
-        system_data = {
-            'os': SystemModel.get_os(),
-            'host': SystemModel.get_hostname(),
-            'kernel': SystemModel.get_kernel(),
-            'uptime': SystemModel.get_uptime(),
-            'ip': SystemModel.get_public_ip(),
-            'cpu': SystemModel.get_cpu(),
-            'temp': SystemModel.get_cpu_temp()
-        }
-        keyboard = [
-            ['/start', '/status', '/storage'],
-            ['/list', '/manage', '/cleanup'],
-            ['/dl', '/yt', '/dls', '/yts'],
-            ['/info']
-        ]
-        reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-        await update.message.reply_text(
-            render_start(system_data), 
-            parse_mode="HTML",
-            reply_markup=reply_markup
-        )
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error Start: {e}")
+MAX_TG_SIZE = 49 * 1024 * 1024 
 
-# ============================= STATUS HANDLER =============================== #
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed(update.effective_user.id, ALLOWED_IDS):
-        return
-    try:
-        cpu = SystemModel.get_cpu()
-        temp = SystemModel.get_cpu_temp()
-        r = SystemModel.get_ram()
-        d = SystemModel.get_disk()
-        ram_data = [r[0], r[1] / (1024**3), r[2] / (1024**3)]
-        disk_data = [d[0], d[1] / (1024**3), d[2] / (1024**3)]
-        msg = render_status(cpu, ram_data, disk_data, temp)
-        await update.message.reply_text(msg, parse_mode="HTML")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error Status: {e}")
+def get_url_from_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.reply_to_message and update.message.reply_to_message.text:
+        return update.message.reply_to_message.text.split()[0]
+    if context.args:
+        return context.args[0]
+    return None
 
-# ============================= STORAGE HANDLER =============================== #
-async def storage(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed(update.effective_user.id, ALLOWED_IDS):
-        return
-    try:
-        disk = SystemModel.get_disk()
-        msg = (
-            f"<b>💾 Disk Usage Info</b>\n"
-            f"<pre>"
-            f"Total : {disk[2] / (1024**3):.1f} GB\n"
-            f"Used  : {disk[1] / (1024**3):.1f} GB\n"
-            f"Free  : {(disk[2]-disk[1]) / (1024**3):.1f} GB\n"
-            f"Usage : {disk[0]}%"
-            f"</pre>"
-        )
-        await update.message.reply_text(msg, parse_mode="HTML")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error Storage: {e}")
-
-# ============================= LIST FILES HANDLER =============================== #
-async def list_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed(update.effective_user.id, ALLOWED_IDS):
-        return
-    try:
-        files = sorted(DOWNLOAD_DIR.glob("*"), key=lambda f: f.stat().st_mtime, reverse=True)
-        total, used, free = shutil.disk_usage("/")
-        percent_used = (used / total) * 100
-
-        if not files:
-            await update.message.reply_text(f"📂 <b>Folder kosong, Bos.</b>\n💾 <b>Sisa Disk:</b> {format_size(free)}", parse_mode="HTML")
-            return
-
-        file_list = [f"• <code>{f.name}</code>\n  └─ 📦 <b>{format_size(f.stat().st_size)}</b>" for f in files[:15]]
-        output = (
-            f"<b>📂 DAFTAR FILE SERVER</b>\n─────────────────────────\n"
-            f"{chr(10).join(file_list)}\n─────────────────────────\n"
-            f"💾 <b>Sisa Disk:</b> {format_size(free)} ({percent_used:.1f}% Used)\n"
-            f"<i>Gunakan /cleanup jika sisa disk menipis.</i>"
-        )
-        await update.message.reply_text(output, parse_mode="HTML")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error List: {e}")
-
-# ============================= MANAGE FILES =============================== #
-async def manage_files(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed(update.effective_user.id, ALLOWED_IDS):
-        return
-    try:
-        files = sorted(list(DOWNLOAD_DIR.glob("*")), key=lambda f: f.stat().st_mtime, reverse=True)
-        if not files:
-            await update.message.reply_text("📂 <b>Folder kosong.</b>", parse_mode="HTML")
-            return
-        keyboard = []
-        text = "<b>🛠️ PENGELOLAAN FILE</b>\n─────────────────────────\n"
-        for i, f in enumerate(files[:10]):
-            text += f"{i+1}. <code>{f.name}</code> (<b>{format_size(f.stat().st_size)}</b>)\n"
-            keyboard.append([InlineKeyboardButton(f"🗑️ Hapus File {i+1}", callback_data=f"askdel_{i}")])
-        keyboard.append([InlineKeyboardButton("❌ Tutup Menu", callback_data="cancel_cleanup")])
-        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error Manage: {e}")
-
-# ============================= CLEANUP TRIGGER =============================== #
-async def cleanup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_allowed(update.effective_user.id, ALLOWED_IDS):
-        return
-    files = [f for f in os.listdir(DOWNLOAD_DIR) if os.path.isfile(os.path.join(DOWNLOAD_DIR, f))]
-    if not files:
-        await update.message.reply_text("🧹 <b>Folder sudah bersih.</b>", parse_mode="HTML")
-        return
-    text = f"⚠️ <b>KONFIRMASI PENGHAPUSAN MASSAL</b>\n\nApakah kamu yakin ingin menghapus <b>{len(files)}</b> file?"
-    keyboard = [[InlineKeyboardButton("✅ Ya, Hapus Semua", callback_data="confirm_cleanup"),
-                 InlineKeyboardButton("❌ Batal", callback_data="cancel_cleanup")]]
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="HTML")
-
-# ============================= CALLBACK HANDLER =============================== #
-async def cleanup_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    data = query.data
-    
-    if not is_allowed(query.from_user.id, ALLOWED_IDS):
-        await query.answer("Akses Ditolak!", show_alert=True)
+async def dls(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_allowed(update.effective_user.id, ALLOWED_IDS): return
+    url = get_url_from_update(update, context)
+    if not url:
+        await update.message.reply_text("❌ Kirim/Reply link-nya dulu, Bos.")
         return
     
-    await query.answer()
-    
+    msg = await update.message.reply_text("⏳ <b>Aria2:</b> Men-download ke server...", parse_mode="HTML")
     try:
-        files = sorted(list(DOWNLOAD_DIR.glob("*")), key=lambda f: f.stat().st_mtime, reverse=True)
+        os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+        filename = f"dl_{update.effective_user.id}_{int(asyncio.get_event_loop().time())}"
+        path = os.path.join(DOWNLOAD_DIR, filename)
         
-        # 1. Logic REDIRECT YTS (Download via Server)
-        if data.startswith("yts_redir_"):
-            link = data.replace("yts_redir_", "")
-            await query.edit_message_text("🚀 <b>Ok Bos!</b> Mengalihkan download ke server (Full HD)...", parse_mode="HTML")
+        cmd = f"aria2c -d {shlex.quote(str(DOWNLOAD_DIR))} -o {shlex.quote(filename)} --seed-time=0 {shlex.quote(url)}"
+        process = await asyncio.create_subprocess_shell(cmd)
+        await process.wait()
+
+        if os.path.exists(path):
+            file_size = os.path.getsize(path)
             
-            process = await asyncio.create_subprocess_exec(
-                "yt-dlp", "-P", str(DOWNLOAD_DIR), 
-                "-f", "bestvideo[height<=1080]+bestaudio/best[height<=1080]", 
-                "--merge-output-format", "mp4", link
-            )
-            await process.wait()
-            await query.message.reply_text(f"✅ <b>Selesai!</b> Video sudah ada di server.\nCek via /list.")
-
-        # 2. Logic KONFIRMASI HAPUS SATUAN
-        elif data.startswith("askdel_"):
-            idx = int(data.split("_")[1])
-            if idx < len(files):
-                target = files[idx]
-                text = f"⚠️ <b>HAPUS SATUAN?</b>\n\n<code>{target.name}</code>"
-                kb = [[InlineKeyboardButton("✅ Ya", callback_data=f"confdel_{idx}"), InlineKeyboardButton("❌ Batal", callback_data="cancel_cleanup")]]
-                await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb), parse_mode="HTML")
-        
-        # 3. Logic EKSEKUSI HAPUS SATUAN
-        elif data.startswith("confdel_"):
-            idx = int(data.split("_")[1])
-            if idx < len(files):
-                filename = files[idx].name
-                os.remove(files[idx])
-                await query.edit_message_text(f"✅ <b>{filename}</b> berhasil dihapus.", parse_mode="HTML")
-        
-        # 4. Logic HAPUS SEMUA
-        elif data == "confirm_cleanup":
-            count = 0
-            for f in os.listdir(DOWNLOAD_DIR):
-                file_path = os.path.join(DOWNLOAD_DIR, f)
-                if os.path.isfile(file_path):
-                    os.remove(file_path)
-                    count += 1
-            await query.edit_message_text(f"🧹 Folder dikosongkan ({count} file dihapus).")
-        
-        # 5. Logic BATAL
-        elif data == "cancel_cleanup":
-            await query.edit_message_text("❌ Aksi dibatalkan.")
-
+            # CEK UKURAN FILE
+            if file_size < MAX_TG_SIZE:
+                await msg.edit_text(f"📤 <b>Selesai!</b> Mengirim file ({format_size(file_size)})...", parse_mode="HTML")
+                with open(path, 'rb') as f:
+                    await update.message.reply_document(document=f)
+            else:
+                await msg.edit_text(
+                    f"📦 <b>Selesai!</b>\n"
+                    f"Ukuran file: <b>{format_size(file_size)}</b> (Melebihi 49MB).\n"
+                    f"File tetap disimpan di server Toshiba.\n"
+                    f"Gunakan <code>/list</code> atau WinSCP untuk mengambilnya.", 
+                    parse_mode="HTML"
+                )
+        else:
+            await msg.edit_text("❌ Gagal: File tidak ditemukan setelah download.")
+            
     except Exception as e:
-        await query.edit_message_text(f"❌ <b>Error Callback:</b> {str(e)}", parse_mode="HTML")
+        await msg.edit_text(f"❌ Error: {str(e)}")
+
+async def yts(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_allowed(update.effective_user.id, ALLOWED_IDS): return
+    url = get_url_from_update(update, context)
+    if not url:
+        await update.message.reply_text("❌ Link YouTube-nya mana?")
+        return
+
+    msg = await update.message.reply_text("🎬 <b>YT-DLP:</b> Sedang memproses video...", parse_mode="HTML")
+    try:
+        os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+        output_template = os.path.join(DOWNLOAD_DIR, f"yt_{update.effective_user.id}_%(title)s.%(ext)s")
+        
+        # Download kualitas terbaik tapi usahakan mp4
+        cmd = f"yt-dlp -o {shlex.quote(output_template)} -f 'best[ext=mp4]/best' {shlex.quote(url)}"
+        process = await asyncio.create_subprocess_shell(cmd)
+        await process.wait()
+
+        search_pattern = os.path.join(DOWNLOAD_DIR, f"yt_{update.effective_user.id}_*")
+        files = glob.glob(search_pattern)
+
+        if files:
+            video_path = files[0]
+            file_size = os.path.getsize(video_path)
+
+            # CEK UKURAN VIDEO
+            if file_size < MAX_TG_SIZE:
+                await msg.edit_text(f"📤 <b>Selesai!</b> Mengirim video ({format_size(file_size)})...", parse_mode="HTML")
+                with open(video_path, 'rb') as v:
+                    await update.message.reply_video(video=v, caption=f"✅ {os.path.basename(video_path)}")
+            else:
+                await msg.edit_text(
+                    f"🎬 <b>Selesai!</b>\n"
+                    f"Ukuran: <b>{format_size(file_size)}</b> (Kegedean buat Telegram).\n"
+                    f"Video aman di server Toshiba.", 
+                    parse_mode="HTML"
+                )
+        else:
+            await msg.edit_text("❌ Gagal menemukan file video.")
+    except Exception as e:
+        await msg.edit_text(f"❌ Error: {str(e)}")
+
+# Fungsi alias agar tidak error saat dipanggil
+async def dl(u, c): await dls(u, c)
+async def yt(u, c): await yts(u, c)
