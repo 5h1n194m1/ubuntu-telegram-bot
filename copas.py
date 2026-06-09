@@ -2,6 +2,7 @@ import os
 import asyncio
 import shlex
 import glob
+import shutil
 from telegram import Update
 from telegram.ext import ContextTypes
 from config.settings import ALLOWED_IDS, DOWNLOAD_DIR
@@ -24,6 +25,8 @@ async def dls(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     msg = await update.message.reply_text("⏳ <b>Aria2:</b> Men-download ke server...", parse_mode="HTML")
+    path = None # Inisialisasi agar bisa diakses di blok finally
+    
     try:
         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
         filename = f"dl_{update.effective_user.id}_{int(asyncio.get_event_loop().time())}"
@@ -36,17 +39,18 @@ async def dls(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if os.path.exists(path):
             file_size = os.path.getsize(path)
             
-            # CEK UKURAN FILE
             if file_size < MAX_TG_SIZE:
-                await msg.edit_text(f"📤 <b>Selesai!</b> Mengirim file ({format_size(file_size)})...", parse_mode="HTML")
+                await msg.edit_text(f"📤 <b>Selesai!</b> Mengirim ke HP kamu ({format_size(file_size)})...", parse_mode="HTML")
                 with open(path, 'rb') as f:
                     await update.message.reply_document(document=f)
+                # Hapus file setelah sukses kirim agar server tidak penuh
+                os.remove(path)
+                await msg.delete() # Hapus pesan status
             else:
                 await msg.edit_text(
-                    f"📦 <b>Selesai!</b>\n"
-                    f"Ukuran file: <b>{format_size(file_size)}</b> (Melebihi 49MB).\n"
-                    f"File tetap disimpan di server Toshiba.\n"
-                    f"Gunakan <code>/list</code> atau WinSCP untuk mengambilnya.", 
+                    f"📦 <b>Selesai Download!</b>\n"
+                    f"Ukuran: <b>{format_size(file_size)}</b> (Melebihi limit Telegram 50MB).\n"
+                    f"File tetap ada di storage server sementara.", 
                     parse_mode="HTML"
                 )
         else:
@@ -54,6 +58,7 @@ async def dls(update: Update, context: ContextTypes.DEFAULT_TYPE):
             
     except Exception as e:
         await msg.edit_text(f"❌ Error: {str(e)}")
+        if path and os.path.exists(path): os.remove(path)
 
 async def yts(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_allowed(update.effective_user.id, ALLOWED_IDS): return
@@ -63,39 +68,43 @@ async def yts(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     msg = await update.message.reply_text("🎬 <b>YT-DLP:</b> Sedang memproses video...", parse_mode="HTML")
+    video_path = None
+    
     try:
         os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-        output_template = os.path.join(DOWNLOAD_DIR, f"yt_{update.effective_user.id}_%(title)s.%(ext)s")
+        unique_id = f"{update.effective_user.id}_{int(asyncio.get_event_loop().time())}"
+        output_template = os.path.join(DOWNLOAD_DIR, f"yt_{unique_id}_%(title)s.%(ext)s")
         
-        # Download kualitas terbaik tapi usahakan mp4
         cmd = f"yt-dlp -o {shlex.quote(output_template)} -f 'best[ext=mp4]/best' {shlex.quote(url)}"
         process = await asyncio.create_subprocess_shell(cmd)
         await process.wait()
 
-        search_pattern = os.path.join(DOWNLOAD_DIR, f"yt_{update.effective_user.id}_*")
+        search_pattern = os.path.join(DOWNLOAD_DIR, f"yt_{unique_id}_*")
         files = glob.glob(search_pattern)
 
         if files:
             video_path = files[0]
             file_size = os.path.getsize(video_path)
 
-            # CEK UKURAN VIDEO
             if file_size < MAX_TG_SIZE:
                 await msg.edit_text(f"📤 <b>Selesai!</b> Mengirim video ({format_size(file_size)})...", parse_mode="HTML")
                 with open(video_path, 'rb') as v:
                     await update.message.reply_video(video=v, caption=f"✅ {os.path.basename(video_path)}")
+                os.remove(video_path) # Hapus dari server
+                await msg.delete()
             else:
                 await msg.edit_text(
-                    f"🎬 <b>Selesai!</b>\n"
+                    f"🎬 <b>Selesai Download!</b>\n"
                     f"Ukuran: <b>{format_size(file_size)}</b> (Kegedean buat Telegram).\n"
-                    f"Video aman di server Toshiba.", 
+                    f"Video tersimpan di server.", 
                     parse_mode="HTML"
                 )
         else:
             await msg.edit_text("❌ Gagal menemukan file video.")
     except Exception as e:
         await msg.edit_text(f"❌ Error: {str(e)}")
+        if video_path and os.path.exists(video_path): os.remove(video_path)
 
-# Fungsi alias agar tidak error saat dipanggil
+# Alias
 async def dl(u, c): await dls(u, c)
 async def yt(u, c): await yts(u, c)
