@@ -1,27 +1,21 @@
-# views/messages.py
 
 def render_start(data: dict) -> str:
-    """
-    Menampilkan banner ASCII ZUL dan daftar perintah lengkap.
-    Pastikan data berisi: os, host, kernel, uptime, cpu, ip, temp.
-    """
-    # Ambil suhu dari data, default ke N/A jika tidak ada
-    temp_val = data.get('temp', 'N/A')
-    cpu_val = data.get('cpu', 0)
-    
+    temp_val = data.get("temp", "N/A")
+    cpu_val = data.get("cpu", 0)
+
     return f"""
 <pre>
-███████╗██╗   ██╗██╗     
-╚══███╔╝██║   ██║██║     
-  ███╔╝ ██║   ██║██║     
- ███╔╝  ██║   ██║██║     
+███████╗██╗   ██╗██╗
+╚══███╔╝██║   ██║██║
+  ███╔╝ ██║   ██║██║
+ ███╔╝  ██║   ██║██║
 ███████╗╚██████╔╝███████╗
 ╚══════╝ ╚═════╝ ╚══════╝
 
-ZUL SERVER
+ZULBOT
 ─────────────────────────
 OS     : {data.get('os', 'Ubuntu')}
-Host   : {data.get('host', 'Zul')}
+Host   : {data.get('host', 'ZULBOT')}
 Kernel : {data.get('kernel', 'N/A')}
 Uptime : {data.get('uptime', 'N/A')}
 CPU    : {cpu_val:.1f}% ({temp_val})
@@ -33,33 +27,29 @@ IP     : {data.get('ip', '0.0.0.0')}
 <b>📊 MONITORING</b>
 <code>/status</code> - Detail CPU, RAM & Disk
 <code>/storage</code> - Cek sisa kapasitas disk
+<code>/temp</code> - Cek suhu CPU
 <code>/info</code> - Informasi bot & server
 
-<b>📥 DOWNLOAD KE DEVICE (Max 50MB)</b>
-<code>/yt [link]</code> - Download YouTube ke Chat
-<code>/dl [link]</code> - Download File ke Chat
+<b>📥 DOWNLOAD KE CHAT</b>
+<code>/yt [link]</code> - Download YouTube ke chat
+<code>/dl [link]</code> - Download file ke chat
 
-<b>🖥️ DOWNLOAD KE SERVER (Unlimited)</b>
-<code>/yts [link]</code> - Download YouTube ke Server
-<code>/dls [link]</code> - Download File ke Server
+<b>🖥️ DOWNLOAD KE SERVER</b>
+<code>/yts [link]</code> - Download YouTube ke server
+<code>/dls [link]</code> - Download file ke server
 
-<b>📂 MANAGEMENT (PENTING)</b>
+<b>📂 MANAGEMENT</b>
 <code>/list</code> - Lihat isi folder & ukuran
-<code>/manage</code> - 🛠️ <b>Pilih file untuk dihapus</b>
-<code>/cleanup</code> - Hapus semua (Bumi Hangus)
+<code>/manage</code> - Pilih file untuk dihapus
+<code>/cleanup</code> - Hapus semua file
 
 ─────────────────────────
-<i>Gunakan mode Server untuk file berukuran besar.</i>
+<i>Gunakan mode server untuk file besar.</i>
 """
 
 def render_status(cpu, ram, disk, temp) -> str:
-    """
-    Menampilkan status resource sistem.
-    ram & disk diharapkan berupa list/tuple: [persen, used, total]
-    """
-    # Menambahkan pengecekan tipe data temp agar tampilan tetap rapi
     cpu_temp = str(temp).strip() if temp else "N/A"
-    
+
     return f"""
 <b>📊 SYSTEM STATUS</b>
 <pre>

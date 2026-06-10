@@ -1,21 +1,28 @@
-# models/info_model.py
-import os
 
-INFO_FILE = "data/info_text.txt"
+from __future__ import annotations
 
-# Pastikan folder data ada
-os.makedirs("data", exist_ok=True)
+from pathlib import Path
+
+from config.settings import INFO_FILE
+
 
 class InfoModel:
     @staticmethod
     def get_info():
-        if not os.path.exists(INFO_FILE):
+        path = Path(INFO_FILE)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        if not path.exists():
             return "<b>ZUL SERVER INFO</b>\nBelum ada informasi yang diset. Gunakan /setinfo untuk mengisi."
-        
-        with open(INFO_FILE, "r") as f:
-            return f.read()
+
+        content = path.read_text(encoding="utf-8")
+        content = content.strip()
+        if not content:
+            return "<b>ZUL SERVER INFO</b>\nBelum ada informasi yang diset. Gunakan /setinfo untuk mengisi."
+        return content
 
     @staticmethod
     def set_info(text):
-        with open(INFO_FILE, "w") as f:
-            f.write(text)
+        path = Path(INFO_FILE)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text.rstrip() + "\n", encoding="utf-8")

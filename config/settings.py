@@ -1,34 +1,47 @@
-# config/settings.py
+
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Path Utama
-BASE_DIR = Path("/home/zul/zulbot")
-TOKEN = os.getenv("TOKEN")
+BASE_DIR = Path(__file__).resolve().parent.parent
 
-# User config - Mengambil dari .env, jika kosong pakai default ID kamu
-raw_ids = os.getenv("ALLOWED_IDS", "1135391914,871102197,8036828631")
-ALLOWED_IDS = {int(x.strip()) for x in raw_ids.split(",")} if raw_ids else {1135391914, 871102197, 8036828631}
 
-# Owner ID - PERBAIKAN: Gunakan huruf kecil (int & os.getenv)
-OWNER_ID = int(os.getenv("OWNER_ID", 1135391914))
+def _parse_int_set(raw: str, fallback: set[int]) -> set[int]:
+    values: set[int] = set()
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            values.add(int(part))
+        except ValueError:
+            continue
+    return values or set(fallback)
 
-# Storage paths
+
+TOKEN = (os.getenv("TOKEN") or "").strip() or None
+
+_default_allowed = {1135391914, 871102197, 8036828631}
+ALLOWED_IDS = _parse_int_set(os.getenv("ALLOWED_IDS", ""), _default_allowed) if os.getenv("ALLOWED_IDS") else set(_default_allowed)
+
+try:
+    OWNER_ID = int(os.getenv("OWNER_ID", str(next(iter(ALLOWED_IDS)))))
+except (TypeError, ValueError):
+    OWNER_ID = next(iter(ALLOWED_IDS))
+
 STORAGE_DIR = BASE_DIR / "storage"
 DOWNLOAD_DIR = BASE_DIR / "downloads"
-
-# Ensure directories exist (Membuat folder jika belum ada)
-STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-# File Paths
 INFO_FILE = STORAGE_DIR / "info.txt"
 LOG_FILE = STORAGE_DIR / "zul_download.log"
 
-# Memastikan file ada (Jika belum ada akan dibuat kosong)
-# touch(exist_ok=True) sudah cukup, tidak perlu cek .exists() lagi
+MAX_TG_SIZE = int(os.getenv("MAX_TG_SIZE", str(49 * 1024 * 1024)))
+DOWNLOAD_CONCURRENCY = max(1, int(os.getenv("DOWNLOAD_CONCURRENCY", "1")))
+
+STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 INFO_FILE.touch(exist_ok=True)
 LOG_FILE.touch(exist_ok=True)
