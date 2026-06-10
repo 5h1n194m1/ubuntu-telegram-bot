@@ -68,7 +68,20 @@ def _which_or_fail(binary_name: str) -> str:
     return binary
 
 
+def _fmt_progress(title: str, line: str, extra: str | None = None) -> str:
+    parts = [f"⏳ <b>{html.escape(title)}</b>"]
+    if extra:
+        parts.append(html.escape(extra))
+    if line:
+        parts.append(f"<code>{html.escape(line[:1200])}</code>")
+    return "\n".join(parts)
+
+
 async def _run_process_with_progress(cmd: tuple[str, ...], status_msg, title: str, cwd: Path | None = None):
+    """
+    Jalankan subprocess dan update pesan Telegram secara berkala.
+    Memakai timeout pendek agar pesan tetap hidup walau output jarang muncul.
+    """
     process = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -79,27 +92,45 @@ async def _run_process_with_progress(cmd: tuple[str, ...], status_msg, title: st
     last_update = datetime.now()
     last_line = ""
     lines: list[str] = []
+    started = False
 
     assert process.stdout is not None
+
+    await update_status_message(
+        status_msg,
+        _fmt_progress(title, "", "Mulai proses download..."),
+        parse_mode="HTML",
+    )
+
     while True:
-        raw = await process.stdout.readline()
-        if not raw:
-            break
-
-        line = raw.decode("utf-8", errors="replace").replace("\r", "").strip()
-        if not line:
-            continue
-
-        lines.append(line)
-        last_line = line
+        try:
+            raw = await asyncio.wait_for(process.stdout.readline(), timeout=1.0)
+        except asyncio.TimeoutError:
+            raw = b""
 
         now = datetime.now()
-        should_update = (now - last_update).total_seconds() >= 1
+        if raw:
+            line = raw.decode("utf-8", errors="replace").replace("\r", "").strip()
+            if line:
+                started = True
+                lines.append(line)
+                last_line = line
+
+        should_update = (now - last_update).total_seconds() >= 1.0
 
         if should_update:
             last_update = now
-            progress_text = f"⏳ {title}\n{line}"
-            await update_status_message(status_msg, progress_text)
+            if last_line:
+                extra = "Sedang berjalan..." if started else "Menunggu output..."
+                await update_status_message(
+                    status_msg,
+                    _fmt_progress(title, last_line, extra),
+                    parse_mode="HTML",
+                )
+
+        if raw == b"":
+            if process.stdout.at_eof():
+                break
 
     returncode = await process.wait()
     if returncode != 0:
@@ -189,8 +220,14 @@ async def _ytdlp_download(url: str, output_dir: Path, status_msg):
         "--no-playlist",
         "--newline",
         "--restrict-filenames",
+        "--retries",
+        "10",
+        "--fragment-retries",
+        "10",
+        "--socket-timeout",
+        "30",
         "-f",
-        "bv*+ba/b",
+        "bv*[height<=1080]+ba/b[height<=1080]/bv*+ba/b",
         "--merge-output-format",
         "mp4",
         "--output",
@@ -231,6 +268,11 @@ async def _handle_aria2(update: Update, context: ContextTypes.DEFAULT_TYPE, keep
         output_name = _download_label(update, url)
 
         try:
+            await update_status_message(
+                status_msg,
+                _fmt_progress("Aria2", "", f"URL diterima: {url}"),
+                parse_mode="HTML",
+            )
             file_path = await _aria2_download(url, work_dir, output_name, status_msg)
             if keep_on_server:
                 size = file_path.stat().st_size
@@ -247,7 +289,7 @@ async def _handle_aria2(update: Update, context: ContextTypes.DEFAULT_TYPE, keep
             else:
                 await _send_result_file(update, status_msg, file_path)
         except Exception as e:
-            await update_status_message(status_msg, f"❌ Error: {html.escape(str(e))}", parse_mode="HTML")
+            await update_status_message(status_msg, f"❌ <b>Error:</b> <code>{html.escape(str(e))}</code>", parse_mode="HTML")
         finally:
             if not keep_on_server:
                 await _cleanup_path(work_dir)
@@ -269,6 +311,11 @@ async def _handle_ytdlp(update: Update, context: ContextTypes.DEFAULT_TYPE, keep
         work_dir = DOWNLOAD_DIR if keep_on_server else Path(tempfile.mkdtemp(prefix="zul_yt_", dir=str(DOWNLOAD_DIR)))
 
         try:
+            await update_status_message(
+                status_msg,
+                _fmt_progress("YT-DLP", "", f"URL diterima: {url}"),
+                parse_mode="HTML",
+            )
             file_path = await _ytdlp_download(url, work_dir, status_msg)
             if keep_on_server:
                 size = file_path.stat().st_size
@@ -285,7 +332,7 @@ async def _handle_ytdlp(update: Update, context: ContextTypes.DEFAULT_TYPE, keep
             else:
                 await _send_result_file(update, status_msg, file_path)
         except Exception as e:
-            await update_status_message(status_msg, f"❌ Error: {html.escape(str(e))}", parse_mode="HTML")
+            await update_status_message(status_msg, f"❌ <b>Error:</b> <code>{html.escape(str(e))}</code>", parse_mode="HTML")
         finally:
             if not keep_on_server:
                 await _cleanup_path(work_dir)
