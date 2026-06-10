@@ -1,60 +1,42 @@
+from __future__ import annotations
 
-def render_start(data: dict) -> str:
-    temp_val = data.get("temp", "N/A")
-    cpu_val = data.get("cpu", 0)
+import asyncio
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-    return f"""
-<pre>
-███████╗██╗   ██╗██╗
-╚══███╔╝██║   ██║██║
-  ███╔╝ ██║   ██║██║
- ███╔╝  ██║   ██║██║
-███████╗╚██████╔╝███████╗
-╚══════╝ ╚═════╝ ╚══════╝
 
-ZULBOT
-─────────────────────────
-OS     : {data.get('os', 'Ubuntu')}
-Host   : {data.get('host', 'ZULBOT')}
-Kernel : {data.get('kernel', 'N/A')}
-Uptime : {data.get('uptime', 'N/A')}
-CPU    : {cpu_val:.1f}% ({temp_val})
-IP     : {data.get('ip', '0.0.0.0')}
-</pre>
+class QueueService:
+    def __init__(self, max_concurrent: int = 1):
+        self.max_concurrent = max(1, int(max_concurrent or 1))
+        self._semaphore = asyncio.Semaphore(self.max_concurrent)
+        self._user_locks: dict[int, asyncio.Lock] = {}
 
-<b>🎮 DAFTAR PERINTAH (Tap untuk Copy)</b>
-─────────────────────────
-<b>📊 MONITORING</b>
-<code>/status</code> - Detail CPU, RAM & Disk
-<code>/storage</code> - Cek sisa kapasitas disk
-<code>/temp</code> - Cek suhu CPU
-<code>/info</code> - Informasi bot & server
+    def _get_user_lock(self, user_id: int | None) -> asyncio.Lock | None:
+        if user_id is None:
+            return None
+        try:
+            key = int(user_id)
+        except (TypeError, ValueError):
+            return None
 
-<b>📥 DOWNLOAD KE CHAT</b>
-<code>/yt [link]</code> - Download YouTube ke chat
-<code>/dl [link]</code> - Download file ke chat
+        lock = self._user_locks.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._user_locks[key] = lock
+        return lock
 
-<b>🖥️ DOWNLOAD KE SERVER</b>
-<code>/yts [link]</code> - Download YouTube ke server
-<code>/dls [link]</code> - Download file ke server
+    async def run(self, job: Callable[[], Awaitable[Any]], user_id: int | None = None):
+        if not callable(job):
+            raise TypeError("job must be a callable returning an awaitable")
 
-<b>📂 MANAGEMENT</b>
-<code>/list</code> - Lihat isi folder & ukuran
-<code>/manage</code> - Pilih file untuk dihapus
-<code>/cleanup</code> - Hapus semua file
+        user_lock = self._get_user_lock(user_id)
 
-─────────────────────────
-<i>Gunakan mode server untuk file besar.</i>
-"""
+        async with self._semaphore:
+            if user_lock is None:
+                return await job()
 
-def render_status(cpu, ram, disk, temp) -> str:
-    cpu_temp = str(temp).strip() if temp else "N/A"
+            async with user_lock:
+                return await job()
 
-    return f"""
-<b>📊 SYSTEM STATUS</b>
-<pre>
-CPU  : {cpu:.1f}% ({cpu_temp})
-RAM  : {ram[0]}% ({ram[1]:.2f}GB/{ram[2]:.2f}GB)
-DISK : {disk[0]}% ({disk[1]:.2f}GB/{disk[2]:.2f}GB)
-</pre>
-"""
+    async def submit(self, job: Callable[[], Awaitable[Any]], user_id: int | None = None):
+        return await self.run(job, user_id=user_id)

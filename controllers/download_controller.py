@@ -1,11 +1,11 @@
-# controllers/download_controller.py
 from __future__ import annotations
 
 import asyncio
+import html
 import shutil
 import tempfile
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -20,7 +20,7 @@ from utils.helpers import (
     is_allowed,
     sanitize_filename,
     unique_token,
-    update_status_message,  # baru
+    update_status_message,
 )
 
 download_queue = QueueService(max_concurrent=DOWNLOAD_CONCURRENCY)
@@ -30,7 +30,6 @@ VALID_VIDEO_SUFFIXES = {".mp4", ".mkv", ".webm", ".mov", ".avi"}
 
 def get_url_from_update(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
-
     candidates = []
 
     if message:
@@ -62,34 +61,52 @@ def _download_label(update: Update, url: str) -> str:
     return f"{user.id}_{short}_{unique_token(6)}"
 
 
-async def _run_process_with_progress(update: Update, cmd, desc: str, work_dir: Path):
-    """
-    Run subprocess and update Telegram message with progress every second.
-    """
-    status_msg = await update.message.reply_text(f"⏳ <b>{desc}:</b> Mulai...", parse_mode="HTML")
-    last_update = datetime.now()
+def _which_or_fail(binary_name: str) -> str:
+    binary = shutil.which(binary_name)
+    if not binary:
+        raise RuntimeError(f"{binary_name} tidak ditemukan di server.")
+    return binary
 
+
+async def _run_process_with_progress(cmd: tuple[str, ...], status_msg, title: str, cwd: Path | None = None):
     process = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
-        cwd=work_dir,
+        cwd=str(cwd) if cwd else None,
     )
 
-    stdout_lines = []
-    async for line in process.stdout:
-        line_text = line.decode("utf-8", errors="replace").strip()
-        stdout_lines.append(line_text)
-        now = datetime.now()
-        if (now - last_update).total_seconds() >= 1:
-            last_update = now
-            try:
-                await update_status_message(status_msg, line_text)
-            except:
-                pass
+    last_update = datetime.now()
+    last_line = ""
+    lines: list[str] = []
 
-    await process.wait()
-    return process.returncode, stdout_lines
+    assert process.stdout is not None
+    while True:
+        raw = await process.stdout.readline()
+        if not raw:
+            break
+
+        line = raw.decode("utf-8", errors="replace").replace("\r", "").strip()
+        if not line:
+            continue
+
+        lines.append(line)
+        last_line = line
+
+        now = datetime.now()
+        should_update = (now - last_update).total_seconds() >= 1
+
+        if should_update:
+            last_update = now
+            progress_text = f"⏳ {title}\n{line}"
+            await update_status_message(status_msg, progress_text)
+
+    returncode = await process.wait()
+    if returncode != 0:
+        detail = "\n".join(lines[-20:]) if lines else last_line or "Proses gagal tanpa output."
+        raise RuntimeError(detail)
+
+    return lines, last_line
 
 
 async def _send_result_file(update: Update, status_msg, file_path: Path):
@@ -97,15 +114,19 @@ async def _send_result_file(update: Update, status_msg, file_path: Path):
     if size > MAX_TG_SIZE:
         await update_status_message(
             status_msg,
-            f"📦 <b>Selesai.</b>\n"
-            f"File terlalu besar untuk dikirim ke Telegram: <b>{format_size(size)}</b>.\n"
-            f"Gunakan mode server (<code>/dls</code> atau <code>/yts</code>).",
+            (
+                "📦 <b>Selesai.</b>\n"
+                f"File terlalu besar untuk dikirim ke Telegram: <b>{format_size(size)}</b>.\n"
+                "Gunakan mode server (<code>/dls</code> atau <code>/yts</code>)."
+            ),
+            parse_mode="HTML",
         )
         return
 
     await update_status_message(
         status_msg,
         f"📤 <b>Selesai!</b> Mengirim file ({format_size(size)})...",
+        parse_mode="HTML",
     )
 
     with file_path.open("rb") as fh:
@@ -130,46 +151,43 @@ async def _cleanup_path(path: Path):
         pass
 
 
-async def _aria2_download(url: str, output_dir: Path, output_name: str):
+async def _aria2_download(url: str, output_dir: Path, output_name: str, status_msg):
     ensure_dir(output_dir)
-    aria2c = shutil.which("aria2c") or "aria2c"
+    aria2c = _which_or_fail("aria2c")
     cmd = (
         aria2c,
         "--allow-overwrite=true",
         "--continue=true",
         "--max-connection-per-server=8",
         "--split=8",
+        "--summary-interval=1",
+        "--console-log-level=notice",
         "--dir",
         str(output_dir),
         "--out",
         output_name,
-        "--console-log-level=warn",
-        "--summary-interval=1",
         url,
     )
-    code, stdout_lines = await _run_process_with_progress(
-        update, cmd, "Aria2 Download", output_dir
-    )
-    if code != 0:
-        raise RuntimeError("\n".join(stdout_lines) or "aria2c gagal menjalankan download.")
+    lines, _ = await _run_process_with_progress(cmd, status_msg, "Aria2 sedang download...")
     target = output_dir / output_name
-    if not target.exists():
-        files = [f for f in output_dir.iterdir() if f.is_file()]
-        if not files:
-            raise RuntimeError("File hasil download tidak ditemukan.")
-        target = max(files, key=lambda p: p.stat().st_mtime)
-    return target
+    if target.exists():
+        return target
+
+    files = [f for f in output_dir.iterdir() if f.is_file()]
+    if not files:
+        raise RuntimeError("\n".join(lines[-20:]) or "File hasil download tidak ditemukan.")
+
+    return max(files, key=lambda p: p.stat().st_mtime)
 
 
-async def _ytdlp_download(url: str, output_dir: Path):
+async def _ytdlp_download(url: str, output_dir: Path, status_msg):
     ensure_dir(output_dir)
-    yt_dlp = shutil.which("yt-dlp") or "yt-dlp"
+    yt_dlp = _which_or_fail("yt-dlp")
     out_template = str(output_dir / "%(title).150s [%(id)s].%(ext)s")
     cmd = (
         yt_dlp,
         "--no-playlist",
         "--newline",
-        "--no-progress",
         "--restrict-filenames",
         "-f",
         "bv*+ba/b",
@@ -181,13 +199,9 @@ async def _ytdlp_download(url: str, output_dir: Path):
         "after_move:filepath",
         url,
     )
-    code, stdout_lines = await _run_process_with_progress(
-        update, cmd, "YT-DLP Download", output_dir
-    )
-    if code != 0:
-        raise RuntimeError("\n".join(stdout_lines) or "yt-dlp gagal menjalankan download.")
 
-    printed = [line.strip() for line in stdout_lines if line.strip()]
+    lines, _ = await _run_process_with_progress(cmd, status_msg, "YT-DLP sedang download...")
+    printed = [line.strip() for line in lines if line.strip()]
     if printed:
         candidate = Path(printed[-1]).expanduser()
         if not candidate.is_absolute():
@@ -197,7 +211,8 @@ async def _ytdlp_download(url: str, output_dir: Path):
 
     files = [f for f in output_dir.iterdir() if f.is_file() and not f.name.endswith(".part")]
     if not files:
-        raise RuntimeError("File hasil yt-dlp tidak ditemukan.")
+        raise RuntimeError("\n".join(lines[-20:]) or "File hasil yt-dlp tidak ditemukan.")
+
     return max(files, key=lambda p: p.stat().st_mtime)
 
 
@@ -211,22 +226,28 @@ async def _handle_aria2(update: Update, context: ContextTypes.DEFAULT_TYPE, keep
         return
 
     async def job():
-        status_msg = await update.message.reply_text("⏳ <b>Aria2:</b> Men-download...", parse_mode="HTML")
+        status_msg = await update.message.reply_text("⏳ Aria2: menyiapkan download...")
         work_dir = DOWNLOAD_DIR if keep_on_server else Path(tempfile.mkdtemp(prefix="zul_dl_", dir=str(DOWNLOAD_DIR)))
         output_name = _download_label(update, url)
 
         try:
-            file_path = await _aria2_download(url, work_dir, output_name)
+            file_path = await _aria2_download(url, work_dir, output_name, status_msg)
             if keep_on_server:
                 size = file_path.stat().st_size
                 await update_status_message(
                     status_msg,
-                    f"✅ <b>Selesai.</b>\nDisimpan di server sebagai:\n<code>{file_path.name}</code>\nUkuran: <b>{format_size(size)}</b>",
+                    (
+                        "✅ <b>Selesai.</b>\n"
+                        "Disimpan di server sebagai:\n"
+                        f"<code>{html.escape(file_path.name)}</code>\n"
+                        f"Ukuran: <b>{format_size(size)}</b>"
+                    ),
+                    parse_mode="HTML",
                 )
             else:
                 await _send_result_file(update, status_msg, file_path)
         except Exception as e:
-            await update_status_message(status_msg, f"❌ Error: {e}")
+            await update_status_message(status_msg, f"❌ Error: {html.escape(str(e))}", parse_mode="HTML")
         finally:
             if not keep_on_server:
                 await _cleanup_path(work_dir)
@@ -244,21 +265,27 @@ async def _handle_ytdlp(update: Update, context: ContextTypes.DEFAULT_TYPE, keep
         return
 
     async def job():
-        status_msg = await update.message.reply_text("🎬 <b>YT-DLP:</b> Sedang memproses video...", parse_mode="HTML")
+        status_msg = await update.message.reply_text("🎬 YT-DLP: menyiapkan video...")
         work_dir = DOWNLOAD_DIR if keep_on_server else Path(tempfile.mkdtemp(prefix="zul_yt_", dir=str(DOWNLOAD_DIR)))
 
         try:
-            file_path = await _ytdlp_download(url, work_dir)
+            file_path = await _ytdlp_download(url, work_dir, status_msg)
             if keep_on_server:
                 size = file_path.stat().st_size
                 await update_status_message(
                     status_msg,
-                    f"✅ <b>Selesai.</b>\nDisimpan di server sebagai:\n<code>{file_path.name}</code>\nUkuran: <b>{format_size(size)}</b>",
+                    (
+                        "✅ <b>Selesai.</b>\n"
+                        "Disimpan di server sebagai:\n"
+                        f"<code>{html.escape(file_path.name)}</code>\n"
+                        f"Ukuran: <b>{format_size(size)}</b>"
+                    ),
+                    parse_mode="HTML",
                 )
             else:
                 await _send_result_file(update, status_msg, file_path)
         except Exception as e:
-            await update_status_message(status_msg, f"❌ Error: {e}")
+            await update_status_message(status_msg, f"❌ Error: {html.escape(str(e))}", parse_mode="HTML")
         finally:
             if not keep_on_server:
                 await _cleanup_path(work_dir)

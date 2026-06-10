@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import math
@@ -80,8 +79,9 @@ def ensure_dir(path):
 def unique_token(length: int = 8) -> str:
     return uuid.uuid4().hex[:length]
 
-async def update_status_message(msg, text):
+
+async def update_status_message(msg, text, parse_mode=None):
     try:
-        await msg.edit_text(text)
-    except:
+        await msg.edit_text(text, parse_mode=parse_mode)
+    except Exception:
         pass
