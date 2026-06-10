@@ -79,3 +79,9 @@ def ensure_dir(path):
 
 def unique_token(length: int = 8) -> str:
     return uuid.uuid4().hex[:length]
+
+async def update_status_message(msg, text):
+    try:
+        await msg.edit_text(text)
+    except:
+        pass
